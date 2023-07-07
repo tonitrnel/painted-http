@@ -1,0 +1,57 @@
+{
+  "name": "@painted/http",
+  "private": true,
+  "version": "0.0.1-rc.1",
+  "type": "module",
+  "description": "React hooks library for data fetching",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "test": "vitest",
+    "converage": "vitest --run --coverage"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/http.umd.js",
+  "module": "./dist/http.es.js",
+  "types": "./dist/types/index.d.ts",
+  "repository": "https://github.com/tonitrnel/painted-http",
+  "license": "MIT",
+  "keywords": [
+    "react",
+    "hooks",
+    "request",
+    "cache",
+    "fetch"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/http.es.js",
+      "require": "./dist/http.umd.js"
+    }
+  },
+  "dependencies": {
+    "react": "^18.2.0"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "5.16.5",
+    "@testing-library/react": "14.0.0",
+    "@types/node": "20.2.5",
+    "@types/react": "18.0.28",
+    "@typescript-eslint/eslint-plugin": "5.57.1",
+    "@typescript-eslint/parser": "5.57.1",
+    "@vitest/coverage-v8": "0.32.4",
+    "eslint": "8.38.0",
+    "eslint-plugin-react-hooks": "4.6.0",
+    "jsdom": "22.1.0",
+    "prettier": "2.8.8",
+    "typescript": "5.0.2",
+    "vite": "4.3.9",
+    "vitest": "0.32.4"
+  }
+}

@@ -12,6 +12,7 @@ type ClientOptions = {
     capacity?: number;
     staleTime?: number;
   };
+  baseUrl?: string;
   fetcher: (request: Request) => Promise<[unknown, Response]>;
   default?: {
     query?: {

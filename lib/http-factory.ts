@@ -20,17 +20,16 @@ import {
 } from './shared.ts';
 import { QueryCacheObject } from './cache.ts';
 
-type ApplicableKeys =
-  | 'Query'
-  | 'Path'
-  | 'Body'
-  | 'Response'
-  | 'Error'
-  | 'Headers';
-
 type HttpSchemaProperties = {
-  [P in ApplicableKeys]: {};
+  Query: {};
+  Path: {};
+  Body: {};
+  Headers: {};
+  Response: unknown;
+  Error: unknown;
 };
+
+type ApplicableKeys = keyof HttpSchemaProperties;
 
 // type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | string;
 
@@ -129,7 +128,7 @@ class HttpFactory<S extends HttpSchemaProperties> {
           } & QueryExecuteOptions<S>
         ) => {
           const blend = blendRef.current;
-          const url = new URL('tmp://internal');
+          const url = new URL(blend.client.options.baseUrl || location.origin);
           if (options?.path || dependencies.path) {
             let pathname = path;
             const params = (options?.path || dependencies.path) as Record<
@@ -537,6 +536,7 @@ class HttpFactory<S extends HttpSchemaProperties> {
       const client = useHttpClient();
       const blendRef = useLatestRef({
         ...options,
+        client,
         fetcher: options.fetcher || client.options.fetcher,
       });
       // 清理相关状态
@@ -566,7 +566,9 @@ class HttpFactory<S extends HttpSchemaProperties> {
           });
           let request: Request;
           try {
-            const url = new URL('tmp://internal');
+            const url = new URL(
+              blend.client.options.baseUrl || location.origin
+            );
             if (config?.path || blend.path) {
               let pathname = path;
               const params = (config?.path || blend.path) as Record<
@@ -682,28 +684,11 @@ class HttpFactory<S extends HttpSchemaProperties> {
   };
 }
 
-export type UnwrapHttpHookType<T, K extends ApplicableKeys> = T extends (
-  options:
-    | HttpQueryHookOptions<infer S extends HttpSchemaProperties>
-    | HttpMutationHookOptions<infer S extends HttpSchemaProperties>
-) => readonly [unknown, unknown]
+export type InferSType<T, K extends ApplicableKeys> = T extends (
+  options?: HttpQueryHookOptions<infer S, unknown> | HttpMutationHookOptions<infer S>
+) => unknown
   ? S[K]
   : never;
-
-/**
- * 解构 GET 或者 POST Query 类型
- */
-export type UnwrapQueryType<T> = UnwrapHttpHookType<T, 'Query'>;
-
-/**
- * 解构 POST Body(Data) 类型
- */
-export type UnwrapBodyType<T> = UnwrapHttpHookType<T, 'Body'>;
-
-/**
- * 解构 GET或者 POST 返回值类型
- */
-export type UnwrapReturnType<T> = UnwrapHttpHookType<T, 'Response'>;
 
 // type ParseMethod<S> = S extends `${infer M extends HttpMethod}:${string}` ? M : never;
 type ParsePathParameters<
@@ -771,9 +756,10 @@ type ParsePathParameters<
  */
 export const createHttpFactory = <S extends string>(url: S) => {
   const [method, path] = url.split(':');
-  return new HttpFactory(method.toUpperCase(), path)
-    .apply<'Path', ParsePathParameters<S>>()
-    .apply<'Error', unknown>();
+  return new HttpFactory(method.toUpperCase(), path).apply<
+    'Path',
+    ParsePathParameters<S>
+  >();
 };
 
 /**
@@ -1246,9 +1232,9 @@ export const serializerHelpers = {
         }
         return void 0;
       }
-      if (v instanceof Date){
+      if (v instanceof Date) {
         search.append(k, v.toISOString());
-        return void 0
+        return void 0;
       }
       search.append(k, String(v));
     });
@@ -1412,14 +1398,22 @@ if (import.meta.vitest) {
       });
 
       it('should skip undefined of value', () => {
-        expect(serializerHelpers.query({a: undefined, b: "1"})).toBe("b=1")
-      })
+        expect(serializerHelpers.query({ a: undefined, b: '1' })).toBe('b=1');
+      });
       it('should handle number or string of value', () => {
-        expect(serializerHelpers.query({a: 1, b: "1"})).toBe("a=1&b=1")
-      })
+        expect(serializerHelpers.query({ a: 1, b: '1' })).toBe('a=1&b=1');
+      });
       it('should convert other types in value to string', () => {
-        expect(decodeURIComponent(serializerHelpers.query({a: false, b: BigInt(111), c: new Date(1688720399911)}))).toBe("a=false&b=111&c=2023-07-07T08:59:59.911Z")
-      })
+        expect(
+          decodeURIComponent(
+            serializerHelpers.query({
+              a: false,
+              b: BigInt(111),
+              c: new Date(1688720399911),
+            })
+          )
+        ).toBe('a=false&b=111&c=2023-07-07T08:59:59.911Z');
+      });
     });
     describe('serializerHelpers.formData()', () => {
       it('should serialize an object into a FormData', () => {

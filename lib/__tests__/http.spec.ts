@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { isFunction, pipe, wait } from '../shared.ts';
-import { createHttpFactory } from '../http-factory.ts';
+import { createHttpFactory, InferSType } from '../http-factory.ts';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { createHttpClient, HttpClientProvider } from '../client.ts';
 import { createElement, FC, PropsWithChildren } from 'react';
@@ -261,8 +261,8 @@ describe('Tests', () => {
       children
     );
   };
-  const useGETForGreet = createHttpFactory("GET:/api/greet")
-    .apply<"Response", "hi!">()
+  const useGETForGreet = createHttpFactory('GET:/api/greet')
+    .apply<'Response', 'hi!'>()
     .doQueryRequest();
   const useGETForUsers = createHttpFactory('GET:/api/users/list')
     .apply<'Response', { list: User[]; total: number }>()
@@ -612,20 +612,20 @@ describe('Tests', () => {
         return useGETForGreet({
           onBefore: beforeFn,
           onSuccess: successFn,
-          onFinally: finallyFn
+          onFinally: finallyFn,
         });
       },
       {
         wrapper: TestHttpClientProvider,
       }
     );
-    expect(beforeFn).toBeCalled()
+    expect(beforeFn).toBeCalled();
     await waitFor(() => {
-      expect(result.current.pending).toBeFalsy()
-    })
-    expect(successFn).toBeCalled()
-    expect(finallyFn).toBeCalled()
-    expect(result.current.kind).toBe("success")
+      expect(result.current.pending).toBeFalsy();
+    });
+    expect(successFn).toBeCalled();
+    expect(finallyFn).toBeCalled();
+    expect(result.current.kind).toBe('success');
   });
   it('should execute onError', async () => {
     const errorFn = vi.fn();
@@ -642,25 +642,28 @@ describe('Tests', () => {
         wrapper: TestHttpClientProvider,
       }
     );
-    expect(result.current.kind).toBe("pending")
+    expect(result.current.kind).toBe('pending');
     await waitFor(() => {
-      expect(result.current.pending).toBeFalsy()
-    })
-    expect(errorFn).toBeCalled()
-    expect(result.current.error).not.toBeUndefined()
-    expect(result.current.kind).toBe("error")
+      expect(result.current.pending).toBeFalsy();
+    });
+    expect(errorFn).toBeCalled();
+    expect(result.current.error).not.toBeUndefined();
+    expect(result.current.kind).toBe('error');
   });
   it('should converted query params', async () => {
     const { result } = renderHook(
       () => {
         return useGETForGreet({
           query: {
-            a: [1,2,3],
-            b: "test"
+            a: [1, 2, 3],
+            b: 'test',
           },
           serializers: {
-            query: (query: Record<string, unknown>) => ({...query, a: (query.a as number[]).join(".")})
-          }
+            query: (query: Record<string, unknown>) => ({
+              ...query,
+              a: (query.a as number[]).join('.'),
+            }),
+          },
         });
       },
       {
@@ -668,9 +671,47 @@ describe('Tests', () => {
       }
     );
     await waitFor(() => {
-      expect(result.current.pending).toBeFalsy()
-    })
+      expect(result.current.pending).toBeFalsy();
+    });
     expect(result.current.request?.url).not.toBeUndefined();
-    expect(new URL(result.current.request!.url).search).toBe("?a=1.2.3&b=test")
+    expect(new URL(result.current.request!.url).search).toBe('?a=1.2.3&b=test');
+  });
+  // type test case
+  it('should normal use InferSType to infer type', () => {
+    expectTypeOf<
+      InferSType<typeof useGETForGreet, 'Response'>
+    >().toEqualTypeOf<'hi!'>();
+    expectTypeOf<
+      InferSType<typeof useGETForGreet, 'Response'>
+    >().not.toEqualTypeOf<{}>();
+    expectTypeOf<
+      InferSType<typeof useGETForGreet, 'Headers'>
+    >().toEqualTypeOf<{}>();
+    expectTypeOf<
+      InferSType<typeof useGETForGreet, 'Query'>
+    >().toEqualTypeOf<{}>();
+    expectTypeOf<
+      InferSType<typeof useGETForGreet, 'Error'>
+    >().toEqualTypeOf<unknown>();
+    expectTypeOf<
+      InferSType<typeof useGETForGreet, 'Body'>
+    >().toEqualTypeOf<{}>();
+    expectTypeOf<
+      InferSType<typeof useGETForUsers, 'Response'>
+    >().toEqualTypeOf<{ list: User[]; total: number }>();
+    expectTypeOf<InferSType<typeof useGETForUsers, 'Query'>>().toEqualTypeOf<{
+      limit: number;
+      page: number;
+      keywords?: string;
+    }>();
+    expectTypeOf<
+      InferSType<typeof useGETForUserProfile, 'Response'>
+    >().toEqualTypeOf<User>();
+    expectTypeOf<
+      InferSType<typeof usePOSTForCreateUser, 'Response'>
+    >().toEqualTypeOf<string>();
+    expectTypeOf<
+      InferSType<typeof usePUTForUpdateUser, 'Body'>
+    >().toEqualTypeOf<Partial<Omit<User, 'id'>>>();
   });
 });

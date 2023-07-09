@@ -1,7 +1,6 @@
 {
   "name": "@painted/http",
-  "private": true,
-  "version": "0.0.1-rc.1",
+  "version": "0.0.1-rc.2",
   "type": "module",
   "description": "React hooks library for data fetching",
   "scripts": {
@@ -28,8 +27,14 @@
   ],
   "exports": {
     ".": {
-      "import": "./dist/http.es.js",
-      "require": "./dist/http.umd.js"
+      "import": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/http.es.js"
+      },
+      "require": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/http.umd.js"
+      }
     }
   },
   "dependencies": {

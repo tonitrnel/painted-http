@@ -38,6 +38,6 @@
     "lib/**/*.ts"
   ],
   "exclude": [
-    "__tests__"
+    "lib/__tests__"
   ]
 }

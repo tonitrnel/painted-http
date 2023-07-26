@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
-import { isFunction, pipe, wait } from '../shared.ts';
-import { createHttpFactory, InferSType } from '../http-factory.ts';
+import { isFunction, pipe, wait } from '@painted/shared';
+import { createHttpFactory, HttpFactory, InferSType } from '../http-factory.ts';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { createHttpClient, HttpClientProvider } from '../client.ts';
 import { createElement, FC, PropsWithChildren } from 'react';
@@ -280,6 +280,8 @@ describe('Tests', () => {
     .apply<'Response', User['id']>()
     .apply<'Body', Partial<Omit<User, 'id'>>>()
     .doMutationRequest();
+  const getUserProfile =
+    HttpFactory.reconstruct(useGETForUserProfile).doRequest();
   beforeEach(() => {
     mocker.reload();
     client.queries.clear();
@@ -309,6 +311,27 @@ describe('Tests', () => {
     expectTypeOf(result.current.data)
       .exclude<undefined>()
       .toEqualTypeOf<User>();
+  });
+
+  it('should execute `getUserProfile` normally ', async () => {
+    const data = await getUserProfile({
+      path: {
+        userId: 'c6ab405d-4921-4435-a38a-40e0a34291d6',
+      },
+      fetcher: async (request) => {
+        const response = await mocker.fetch(request);
+        if (!response.ok) {
+          throw new Error(
+            `${request.method} ${request.url.toString()} ${response.status} ${
+              response.statusText
+            }\n${await response.text()}`
+          );
+        }
+        return response;
+      },
+    });
+    expect(mocker.calls.length).toBe(1);
+    expect(data.id).toBe('c6ab405d-4921-4435-a38a-40e0a34291d6');
   });
 
   it('should only be triggered when enabled', async () => {
@@ -706,6 +729,9 @@ describe('Tests', () => {
     }>();
     expectTypeOf<
       InferSType<typeof useGETForUserProfile, 'Response'>
+    >().toEqualTypeOf<User>();
+    expectTypeOf<
+      InferSType<typeof getUserProfile, 'Response'>
     >().toEqualTypeOf<User>();
     expectTypeOf<
       InferSType<typeof usePOSTForCreateUser, 'Response'>

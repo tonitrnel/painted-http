@@ -7,9 +7,9 @@ import {
   useRef,
 } from 'react';
 import { useHttpClient } from './client.ts';
-import { useLatestFunc, useLatestRef } from './use-latest.ts';
+import { useLatestFunc, useLatestRef } from '@painted/shared';
 import {
-  equals,
+  isEquals,
   isArray,
   isDef,
   isNumber,
@@ -17,7 +17,7 @@ import {
   isString,
   pick,
   pipe,
-} from './shared.ts';
+} from '@painted/shared';
 import { QueryCacheObject } from './cache.ts';
 
 type HttpSchemaProperties = {
@@ -33,22 +33,27 @@ type ApplicableKeys = keyof HttpSchemaProperties;
 
 // type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | string;
 
-class HttpFactory<S extends HttpSchemaProperties> {
-  constructor(readonly method: string, readonly path: string) {}
+export class HttpFactory<S extends HttpSchemaProperties> {
+  constructor(readonly method: string, readonly pathname: string) {}
+  public static reconstruct<F extends Function, S extends InferFullSType<F>>(fn: F){
+    if (!Reflect.has(fn, '__i')) throw new Error(`Unable to reconstruct the ${fn.name} function`)
+    const { method, pathname } = Reflect.get(fn, '__i') as {method: string, pathname: string};
+    return new HttpFactory<S>(method, pathname)
+  }
   public apply<K extends ApplicableKeys, T>() {
     // override prev same type
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     return this as unknown as HttpFactory<Omit<S, K> & Record<K, T>>;
   }
-  doQueryRequest = () => {
-    const { path, method } = this;
-    return function useHttpQueryRequest<Transformed>(
-      options: HttpQueryHookOptions<S, Transformed> = {}
+  public doQueryRequest = () => {
+    const { pathname, method } = this;
+    function useHttpQueryRequest<Mutated>(
+      options: HttpQueryHookOptions<S, Mutated> = {}
     ) {
-      type TransformedData = DecisionResponseType<S['Response'], Transformed>;
+      type MutatedData = DecisionResponseType<S['Response'], Mutated>;
       const exposeRef = useRef<{
-        data?: TransformedData | undefined;
+        data?: MutatedData | undefined;
         error?: S['Error'] | undefined;
         response?: Response;
         request?: Request;
@@ -69,7 +74,7 @@ class HttpFactory<S extends HttpSchemaProperties> {
         cachedIds?: Set<string>;
       }>({});
       // 强制刷新
-      const dispatchUpdate = useReducer(() => ({}), { path })[1];
+      const dispatchUpdate = useReducer(() => ({}), { pathname })[1];
       const client = useHttpClient();
       // 引用最新的配置
       const blendRef = useLatestRef({
@@ -81,10 +86,10 @@ class HttpFactory<S extends HttpSchemaProperties> {
       const dependencies = useMemo(() => {
         const { query: previousQuery, path: previousPath } =
           metadataRef.current;
-        if (!previousQuery || !equals(previousQuery, options.query)) {
+        if (!previousQuery || !isEquals(previousQuery, options.query)) {
           metadataRef.current.query = options.query;
         }
-        if (!previousPath || !equals(previousPath, options.path)) {
+        if (!previousPath || !isEquals(previousPath, options.path)) {
           metadataRef.current.path = options.path;
         }
         return pick(metadataRef.current, ['query', 'path']);
@@ -110,7 +115,7 @@ class HttpFactory<S extends HttpSchemaProperties> {
             expose.data = ((await blend.onSuccess?.(ret[0] as S['Response'], {
               req: ret[1],
               res: ret[2],
-            })) ?? ret[0]) as TransformedData;
+            })) ?? ret[0]) as MutatedData;
             expose.response = ret[2];
             expose.request = ret[1];
             dispatchUpdate();
@@ -129,19 +134,7 @@ class HttpFactory<S extends HttpSchemaProperties> {
         ) => {
           const blend = blendRef.current;
           const url = new URL(blend.client.options.baseUrl || location.origin);
-          if (options?.path || dependencies.path) {
-            let pathname = path;
-            const params = (options?.path || dependencies.path) as Record<
-              string,
-              string
-            >;
-            for (const key of Object.keys(params)) {
-              pathname = path.replace(`{${key}}`, String(params[key]));
-            }
-            url.pathname = pathname;
-          } else {
-            url.pathname = path;
-          }
+          injectPathParams(url, pathname, options?.path || dependencies.path);
           if (options?.query || dependencies.query) {
             const search = new URLSearchParams();
             const params = pipe(
@@ -312,7 +305,7 @@ class HttpFactory<S extends HttpSchemaProperties> {
             expose.data = ((await blend.onSuccess?.(ret[0], {
               req: ret[1],
               res: ret[2],
-            })) ?? ret[0]) as TransformedData;
+            })) ?? ret[0]) as MutatedData;
             expose.request = ret[1];
             expose.response = ret[2];
           } catch (e) {
@@ -359,7 +352,7 @@ class HttpFactory<S extends HttpSchemaProperties> {
             const finalData = ((await blend.onSuccess?.(ret[0], {
               req: ret[1],
               res: ret[2],
-            })) ?? ret[0]) as TransformedData;
+            })) ?? ret[0]) as MutatedData;
             rerender(() => {
               expose.data = finalData;
               expose.request = ret[1];
@@ -510,16 +503,16 @@ class HttpFactory<S extends HttpSchemaProperties> {
         keyof HttpQueryHookReturn<never, never>,
         unknown
       > as HttpQueryHookReturn<
-        DecisionResponseType<S['Response'], Transformed>,
+        DecisionResponseType<S['Response'], MutatedData>,
         S
       >;
-    };
+    }
+    useHttpQueryRequest.__i = { method, pathname };
+    return useHttpQueryRequest;
   };
-  doMutationRequest = () => {
-    const { path, method } = this;
-    return function useHttpMutationRequest(
-      options: HttpMutationHookOptions<S> = {}
-    ) {
+  public doMutationRequest = () => {
+    const { pathname, method } = this;
+    function useHttpMutationRequest(options: HttpMutationHookOptions<S> = {}) {
       const exposeRef = useRef<{
         data?: S['Response'];
         error?: S['Error'];
@@ -532,7 +525,7 @@ class HttpFactory<S extends HttpSchemaProperties> {
         unmount?: boolean;
       }>({});
       // 强制刷新
-      const dispatchUpdate = useReducer(() => ({}), { path })[1];
+      const dispatchUpdate = useReducer(() => ({}), { pathname })[1];
       const client = useHttpClient();
       const blendRef = useLatestRef({
         ...options,
@@ -569,44 +562,18 @@ class HttpFactory<S extends HttpSchemaProperties> {
             const url = new URL(
               blend.client.options.baseUrl || location.origin
             );
-            if (config?.path || blend.path) {
-              let pathname = path;
-              const params = (config?.path || blend.path) as Record<
-                string,
-                string
-              >;
-              for (const key of Object.keys(params)) {
-                pathname = path.replace(`{${key}}`, String(params[key]));
-              }
-              url.pathname = pathname;
-            } else {
-              url.pathname = path;
-            }
+            injectPathParams(url, pathname, config?.path || blend.path);
             if (config?.query || blend.query) {
-              const search = new URLSearchParams();
-              const params = pipe((config?.query || blend.query) as S['Query'])(
-                config.serializers?.query
-              )() as Record<string, string>;
-              for (const key of Object.keys(params)) {
-                search.append(key, String(params[key]));
-              }
-              url.search = search.toString();
+              injectQueryParams(
+                url,
+                pipe((config?.query || blend.query || {}) as S['Query'])(
+                  config.serializers?.query
+                )() as Record<string, string>
+              );
             }
             const [contentType, body] = pipe(args[0] as S['Body'])(
               config.serializers?.body
-            )((prev) => {
-              if (prev instanceof URLSearchParams)
-                return ['application/x-www-form-urlencoded', prev] as const;
-              if (prev instanceof FormData) return [false, prev] as const;
-              if (prev instanceof Blob) return [false, prev] as const;
-              if (prev instanceof ArrayBuffer) return [false, prev] as const;
-              if (isPlainObject(prev))
-                return [
-                  'application/json',
-                  JSON.stringify(prev) as string,
-                ] as const;
-              return [false, null] as const;
-            })();
+            )((body) => serializeBody(body))();
             request = new Request(url, {
               method,
               body,
@@ -680,15 +647,73 @@ class HttpFactory<S extends HttpSchemaProperties> {
         keyof HttpMutationHookReturn<never>,
         unknown
       > as HttpMutationHookReturn<S>;
-    };
+    }
+    useHttpMutationRequest.__i = { method, pathname };
+    return useHttpMutationRequest;
+  };
+  public doRequest = () => {
+    const { pathname, method } = this;
+    async function httpRequest<Mutated = S['Response']>(
+      options: HttpRequestOptions<S, Mutated> = {} as HttpRequestOptions<
+        S,
+        Mutated
+      >
+    ): Promise<Mutated> {
+      const {
+        baseUrl = location.origin,
+        path: pathParams,
+        query,
+        body,
+        headers,
+        init,
+        serializers,
+        fetcher = fetch,
+      } = options || {};
+      const url = new URL(baseUrl);
+      injectPathParams(
+        url,
+        pathname,
+        pathParams as Record<string, string | number>
+      );
+      if (query) {
+        injectQueryParams(url, pipe(query)(serializers?.query)());
+      }
+      const [contentType, payload] = pipe(body as S['Body'])(serializers?.body)(
+        (body) => serializeBody(body)
+      )();
+      const req = new Request(url, {
+        method,
+        body: payload,
+        ...init,
+        headers: mergeHeaders(
+          contentType === false ? null : { 'Content-Type': contentType },
+          headers,
+          init?.headers
+        ),
+      });
+      const res = await fetcher(req);
+      if (serializers?.response)
+        return (await serializers.response(res)) as Promise<Mutated>;
+      else return (await res.json()) as Promise<Mutated>;
+    }
+    httpRequest.__i = { method, pathname };
+    return httpRequest;
   };
 }
-
-export type InferSType<T, K extends ApplicableKeys> = T extends (
-  options?: HttpQueryHookOptions<infer S, unknown> | HttpMutationHookOptions<infer S>
-) => unknown
-  ? S[K]
-  : never;
+type InferableFnTrait<Options> = (options?: Options) => unknown;
+type InferFullSType<
+  T
+> = T extends InferableFnTrait<HttpQueryHookOptions<infer S1, unknown>>
+  ? S1
+  : T extends InferableFnTrait<HttpMutationHookOptions<infer S2>>
+    ? S2
+    : T extends InferableFnTrait<HttpRequestOptions<infer S3, unknown>>
+      ? S3
+      : never;
+export type InferSType<
+  T,
+  K extends ApplicableKeys
+> = InferFullSType<T>[K]
 
 // type ParseMethod<S> = S extends `${infer M extends HttpMethod}:${string}` ? M : never;
 type ParsePathParameters<
@@ -794,11 +819,11 @@ export interface Serializers<TQuery, TBody> {
   body?(body: TBody): unknown;
 }
 
-// ====== Query Execute Type
+// ====== Query Type
 
 export interface HttpQueryHookOptions<
   S extends HttpSchemaProperties,
-  TTransform = S['Response']
+  Mutated = S['Response']
 > {
   /**
    * 查询参数
@@ -940,7 +965,7 @@ export interface HttpQueryHookOptions<
   onSuccess?: (
     data: S['Response'],
     context: { req: Request; res: Response }
-  ) => TTransform | Promise<TTransform>;
+  ) => Mutated | Promise<Mutated>;
   /**
    * 当错误时的回调
    * @param error
@@ -1015,7 +1040,7 @@ type QueryExecuteFunc<S extends HttpSchemaProperties> = (
   ...args: [query: Bypass<S['Query']>, options?: QueryExecuteOptions<S>]
 ) => Promise<S['Response']>;
 
-// ====== Query Mutation Type
+// ====== Mutation Type
 export type HttpMutationHookOptions<S extends HttpSchemaProperties> = {
   /**
    * 查询参数
@@ -1115,6 +1140,29 @@ export type MutationExecuteOptions<S extends HttpSchemaProperties> = {
    */
   serializers?: Serializers<S['Query'], S['Body']>;
 };
+
+// ====== Request Type
+type HttpRequestOptions<
+  S extends HttpSchemaProperties,
+  Mutated = S['Response']
+> = {
+  baseUrl?: string;
+  init?: RequestInit;
+  serializers?: {
+    query?(query: S['Query']): Record<string, string | number>;
+    body?(body: S['Body']): unknown;
+    response?(response: Response): Mutated | Promise<Mutated>;
+  };
+  fetcher?: (req: Request) => Promise<Response>;
+} & ComposeOptions<S['Query'], 'query'> &
+  ComposeOptions<S['Body'], 'body'> &
+  ComposeOptions<S['Path'], 'path'> &
+  ComposeOptions<S['Headers'], 'headers'>;
+type ComposeOptions<Val, Key extends string> = {} extends Val
+  ? { [K in Key]?: Val }
+  : {
+      [K in Key]: Val;
+    };
 // ====== End
 
 // for internal use only
@@ -1163,6 +1211,41 @@ const mergeHeaders = (...args: (HeadersInit | undefined | false | null)[]) => {
     }
   }
   return headers;
+};
+const injectPathParams = (
+  url: URL,
+  pathname: string,
+  params?: Record<string, string | number>
+) => {
+  if (!params) {
+    url.pathname = pathname;
+  } else {
+    url.pathname = Object.keys(params).reduce((pathname, key) => {
+      return pathname.replace(`{${key}}`, String(params[key]));
+    }, pathname);
+  }
+};
+const injectQueryParams = (
+  url: URL,
+  params?: Record<string, string | number>
+) => {
+  if (!params) return void 0;
+  url.search = Object.keys(params)
+    .reduce((search, key) => {
+      search.append(key, String(params[key]));
+      return search;
+    }, new URLSearchParams())
+    .toString();
+};
+const serializeBody = (body?: Record<string, unknown>) => {
+  if (body instanceof URLSearchParams)
+    return ['application/x-www-form-urlencoded', body] as const;
+  if (body instanceof FormData) return [false, body] as const;
+  if (body instanceof Blob) return [false, body] as const;
+  if (body instanceof ArrayBuffer) return [false, body] as const;
+  if (isPlainObject(body))
+    return ['application/json', JSON.stringify(body) as string] as const;
+  return [false, null] as const;
 };
 
 type RefreshOptions = {

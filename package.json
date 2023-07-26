@@ -1,6 +1,6 @@
 {
   "name": "@painted/http",
-  "version": "0.0.1-rc.3",
+  "version": "0.0.1-rc.4",
   "type": "module",
   "description": "React hooks library for data fetching",
   "scripts": {

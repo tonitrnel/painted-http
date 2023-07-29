@@ -3,7 +3,7 @@ import { isFunction, pipe, wait } from '@painted/shared';
 import { createHttpFactory, HttpFactory, InferSType } from '../http-factory.ts';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { createHttpClient, HttpClientProvider } from '../client.ts';
-import { createElement, FC, PropsWithChildren } from 'react';
+import { createElement, StrictMode, FC, PropsWithChildren } from 'react';
 
 type ResponsibleType =
   | Record<string, unknown>
@@ -261,6 +261,13 @@ describe('Tests', () => {
       children
     );
   };
+  const TestHttpClientProviderWithStrictMode: FC<PropsWithChildren> = ({ children }) => {
+    return createElement(
+      StrictMode,
+      null,
+      createElement(TestHttpClientProvider, {}, children)
+    );
+  };
   const useGETForGreet = createHttpFactory('GET:/api/greet')
     .apply<'Response', 'hi!'>()
     .doQueryRequest();
@@ -282,6 +289,8 @@ describe('Tests', () => {
     .doMutationRequest();
   const getUserProfile =
     HttpFactory.reconstruct(useGETForUserProfile).doRequest();
+
+
   beforeEach(() => {
     mocker.reload();
     client.queries.clear();
@@ -308,6 +317,37 @@ describe('Tests', () => {
       expect(result.current.pending).toBe(false);
       expect(result.current.data?.name).toBe('寒菁菁');
     });
+    expectTypeOf(result.current.data)
+      .exclude<undefined>()
+      .toEqualTypeOf<User>();
+  });
+
+  it('should get data and return type test in StrictMode', async () => {
+    let renderCount = 0;
+    const { result } = renderHook(
+      () => {
+        renderCount++;
+        return useGETForUserProfile({
+          path: { userId: 'c6ab405d-4921-4435-a38a-40e0a34291d6' },
+        });
+      },
+      { wrapper: TestHttpClientProviderWithStrictMode }
+    );
+    // 初次渲染，Hook 执行，StrictMode 重新渲染，Hook 执行
+    expect(result.current.pending).toBe(true);
+    expect(renderCount).toBe(4);
+    // 再次渲染
+    await waitFor(() => {
+      // 请求结束
+      expect(result.current.pending).toBe(false);
+    });
+    // SetState 在 StrictMode 下会触发两次渲染
+    expect(renderCount).toBe(6);
+    expect(result.current.data?.name).toBe('寒菁菁');
+    // 一定几率存在测试走完但是还有请求没有发送完成，因此需要等到两个请求均收到，以免影响后续测试
+    await waitFor(() => {
+      expect(mocker.calls.length).toBe(2);
+    })
     expectTypeOf(result.current.data)
       .exclude<undefined>()
       .toEqualTypeOf<User>();
@@ -392,6 +432,66 @@ describe('Tests', () => {
     //   { wrapper: TestHttpClientProvider }
     // );
     // 两个 Hooks 都应该开始请求
+    expect(result.current.read1.pending).toBe(true);
+    expect(result.current.read2.pending).toBe(true);
+    let total: number | undefined = void 0;
+    // wait read1
+    await waitFor(() => {
+      expect(result.current.read1.pending).toBe(false);
+      expect(result.current.read1.data?.total).not.toBeUndefined();
+      total = result.current.read1.data?.total ?? 0;
+      expect(result.current.read2.pending).toBe(false);
+      expect(result.current.read2.data?.total).toBe(total);
+      expect(mocker.calls.length).toBe(1);
+    });
+    expect(total).not.toBeUndefined();
+    // 现在创建一个用户
+    const userId = await act(async () => {
+      return await result.current.write.execute({
+        name: '原怀菀',
+        email: 'aglais@outlaws.com',
+        gender: '女',
+        phone: '19213547756',
+      });
+    });
+    // 用户创建完成，user id 不应该为空
+    expect(userId).not.toBeUndefined(); // 调用接口刷新
+    act(() => {
+      result.current.read1.refresh();
+    });
+    // read1 应该开始请求，read2 保持原样
+    expect(result.current.read1.pending).toBe(true);
+    expect(result.current.read2.pending).toBe(false);
+    await waitFor(() => {
+      expect(result.current.read1.pending).toBe(false);
+      // 读取用户列表、创建用户、刷新
+      expect(mocker.calls.length).toBe(3);
+      // 创建用户后，应该有新的用户，总数应该加1
+      expect(result.current.read1.data?.total).toBe(total! + 1);
+      // 相同缓存键的也应该刷新了
+      expect(result.current.read2.data?.total).toBe(total! + 1);
+    });
+  });
+
+  it('should load or refresh at the same time with cacheKey in StrictMode', async () => {
+    const { result } = renderHook(
+      () => {
+        const read1 = useGETForUsers({
+          cache: {
+            key: 'users',
+            staleTime: 0,
+          },
+        });
+        const read2 = useGETForUsers({
+          cache: {
+            key: 'users',
+          },
+        });
+        const write = usePOSTForCreateUser();
+        return { read1, read2, write };
+      },
+      { wrapper: TestHttpClientProviderWithStrictMode }
+    );
     expect(result.current.read1.pending).toBe(true);
     expect(result.current.read2.pending).toBe(true);
     let total: number | undefined = void 0;

@@ -35,10 +35,16 @@ type ApplicableKeys = keyof HttpSchemaProperties;
 
 export class HttpFactory<S extends HttpSchemaProperties> {
   constructor(readonly method: string, readonly pathname: string) {}
-  public static reconstruct<F extends Function, S extends InferFullSType<F>>(fn: F){
-    if (!Reflect.has(fn, '__i')) throw new Error(`Unable to reconstruct the ${fn.name} function`)
-    const { method, pathname } = Reflect.get(fn, '__i') as {method: string, pathname: string};
-    return new HttpFactory<S>(method, pathname)
+  public static reconstruct<F extends Function, S extends InferFullSType<F>>(
+    fn: F
+  ) {
+    if (!Reflect.has(fn, ' __source'))
+      throw new Error(`Unable to reconstruct the ${fn.name} function`);
+    const { method, pathname } = Reflect.get(fn, ' __source') as {
+      method: string;
+      pathname: string;
+    };
+    return new HttpFactory<S>(method, pathname);
   }
   public apply<K extends ApplicableKeys, T>() {
     // override prev same type
@@ -48,6 +54,7 @@ export class HttpFactory<S extends HttpSchemaProperties> {
   }
   public doQueryRequest = () => {
     const { pathname, method } = this;
+    let seq = 0;
     function useHttpQueryRequest<Mutated>(
       options: HttpQueryHookOptions<S, Mutated> = {}
     ) {
@@ -65,7 +72,7 @@ export class HttpFactory<S extends HttpSchemaProperties> {
         // 标记组件第一次是否加载完成
         done?: boolean;
         // 标准当前请求的ID
-        requestId?: number | undefined;
+        requestId?: string | undefined;
         // 查询参数
         query?: S['Query'];
         // 路径参数
@@ -178,7 +185,7 @@ export class HttpFactory<S extends HttpSchemaProperties> {
             expose.error = void 0;
           }
           dispatchUpdate();
-          const requestId = Date.now();
+          const requestId = `${Date.now()}#${seq++}`;
           metadata.requestId = requestId;
           try {
             await blend.onBefore?.();
@@ -282,20 +289,20 @@ export class HttpFactory<S extends HttpSchemaProperties> {
                   notifyQueue: new Set([cacheSubscriber]),
                 };
               }
-              // console.log('添加缓存', cache.cacheKey, now);
+              // console.log('添加缓存,' cache.cacheKey, now);
               blend.client.queries.set(blend.cache.key, cacheObject);
               metadata.cachedIds!.add(blend.cache.key);
             }).finally(() => {
               // 请求是否过时(有一个新地请求已经发出)
               if (requestId !== metadata.requestId) {
-                throw new OverdueError('request is outdated', {
+                throw new OverdueError('The request is outdated', {
                   currentRequestId: requestId,
                   latestRequestId: metadata.requestId,
                 });
               }
               // hook是否卸载
               if (metadata.unmount) {
-                throw new OverdueError('the hook is unmounted');
+                throw new OverdueError('The hook is unmounted');
               }
               // 请求完成，清理状态
               cleanup();
@@ -308,15 +315,16 @@ export class HttpFactory<S extends HttpSchemaProperties> {
             })) ?? ret[0]) as MutatedData;
             expose.request = ret[1];
             expose.response = ret[2];
+            dispatchUpdate();
           } catch (e) {
             if (e instanceof OverdueError) return void 0;
             checkUnexpectedError(e);
             blend.onError?.(e as S['Error']);
             expose.error = e as S['Error'];
+            dispatchUpdate();
           } finally {
             blend.onFinally?.();
           }
-          dispatchUpdate();
         },
         [blendRef, dispatchUpdate, doRequest, cacheSubscriber, cleanup]
       );
@@ -412,6 +420,7 @@ export class HttpFactory<S extends HttpSchemaProperties> {
       // 在组件卸载时进行标记
       useEffect(() => {
         const metadata = metadataRef.current;
+        metadata.unmount = false;
         return () => {
           metadata.unmount = true;
         };
@@ -507,7 +516,7 @@ export class HttpFactory<S extends HttpSchemaProperties> {
         S
       >;
     }
-    useHttpQueryRequest.__i = { method, pathname };
+    Reflect.set(useHttpQueryRequest, ' __source', { method, pathname });
     return useHttpQueryRequest;
   };
   public doMutationRequest = () => {
@@ -625,6 +634,7 @@ export class HttpFactory<S extends HttpSchemaProperties> {
       // 标记组件已经卸载
       useEffect(() => {
         const metadata = metadataRef.current;
+        metadata.unmount = false;
         return () => {
           metadata.unmount = true;
         };
@@ -648,7 +658,7 @@ export class HttpFactory<S extends HttpSchemaProperties> {
         unknown
       > as HttpMutationHookReturn<S>;
     }
-    useHttpMutationRequest.__i = { method, pathname };
+    Reflect.set(useHttpMutationRequest, ' __source', { method, pathname });
     return useHttpMutationRequest;
   };
   public doRequest = () => {
@@ -696,24 +706,21 @@ export class HttpFactory<S extends HttpSchemaProperties> {
         return (await serializers.response(res)) as Promise<Mutated>;
       else return (await res.json()) as Promise<Mutated>;
     }
-    httpRequest.__i = { method, pathname };
+    Reflect.set(httpRequest, ' __source', { method, pathname });
     return httpRequest;
   };
 }
 type InferableFnTrait<Options> = (options?: Options) => unknown;
-type InferFullSType<
-  T
-> = T extends InferableFnTrait<HttpQueryHookOptions<infer S1, unknown>>
+type InferFullSType<T> = T extends InferableFnTrait<
+  HttpQueryHookOptions<infer S1, unknown>
+>
   ? S1
   : T extends InferableFnTrait<HttpMutationHookOptions<infer S2>>
-    ? S2
-    : T extends InferableFnTrait<HttpRequestOptions<infer S3, unknown>>
-      ? S3
-      : never;
-export type InferSType<
-  T,
-  K extends ApplicableKeys
-> = InferFullSType<T>[K]
+  ? S2
+  : T extends InferableFnTrait<HttpRequestOptions<infer S3, unknown>>
+  ? S3
+  : never;
+export type InferSType<T, K extends ApplicableKeys> = InferFullSType<T>[K];
 
 // type ParseMethod<S> = S extends `${infer M extends HttpMethod}:${string}` ? M : never;
 type ParsePathParameters<

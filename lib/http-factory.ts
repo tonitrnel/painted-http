@@ -87,6 +87,7 @@ export class HttpFactory<S extends HttpSchemaProperties> {
       const blendRef = useLatestRef({
         ...options,
         client,
+        cache: options.cache === true ? { key: pathname } : options.cache,
         fetcher: options.fetcher || client.options.fetcher,
       });
       // 构建参数依赖
@@ -945,24 +946,26 @@ export interface HttpQueryHookOptions<
    * ```
    * @default false
    */
-  cache?: {
-    /**
-     * 缓存键
-     */
-    key: string;
-    /**
-     * 缓存有效期(unit: ms)
-     * @default 5 Minutes
-     */
-    staleTime?: number;
-    /**
-     * 缓存生命周期
-     * @param inner 只在当前组件生命周期内有效
-     * @param outer 在HttpCacheProvider组件生命周期内有效
-     * @default outer
-     */
-    scope?: 'inner' | 'outer';
-  };
+  cache?:
+    | {
+        /**
+         * 缓存键
+         */
+        key: string;
+        /**
+         * 缓存有效期(unit: ms)
+         * @default 5 Minutes
+         */
+        staleTime?: number;
+        /**
+         * 缓存生命周期
+         * @param inner 只在当前组件生命周期内有效
+         * @param outer 在HttpCacheProvider组件生命周期内有效
+         * @default outer
+         */
+        scope?: 'inner' | 'outer';
+      }
+    | true;
   /**
    * 当成功时的回调，返回值将作为新的数据
    * @param data

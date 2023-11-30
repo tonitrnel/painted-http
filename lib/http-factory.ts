@@ -1228,12 +1228,13 @@ const injectPathParams = (
   params?: Record<string, string | number>
 ) => {
   if (!params) {
-    url.pathname = pathname;
+    url.pathname += pathname;
   } else {
-    url.pathname = Object.keys(params).reduce((pathname, key) => {
+    url.pathname += Object.keys(params).reduce((pathname, key) => {
       return pathname.replace(`{${key}}`, String(params[key]));
     }, pathname);
   }
+  url.pathname = url.pathname.replace("//", '/')
 };
 const injectQueryParams = (
   url: URL,

@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import child_process from 'node:child_process';
 import { defineConfig, PackageData, createLogger, PluginOption } from 'vite';
+import { glob } from 'glob';
+import { fileURLToPath } from 'node:url'
 import 'vitest/config';
 
 const __PROJECT__ = process.cwd();
@@ -27,10 +29,17 @@ export default defineConfig(async () => {
     },
     build: {
       lib: {
-        entry: path.join(__PROJECT__, 'lib/index.ts'),
+        entry: Object.fromEntries(glob.sync('lib/*.ts')
+          .filter(path => !path.endsWith('.d.ts'))
+          .map(file => [
+            path.relative('lib', file.slice(0, file.length - path.extname(file).length)),
+            fileURLToPath(new URL(file, import.meta.url))
+          ])),
         name,
-        fileName: (format) => `${name}.${format}.js`,
+        formats: ['es']
       },
+      sourcemap: false,
+      minify: false,
       rollupOptions: {
         external: ['react'],
         output: {
@@ -54,8 +63,7 @@ export default defineConfig(async () => {
         name: 'build-declarations',
         enforce: 'post',
         apply: 'build',
-        generateBundle: async (options) => {
-          if (options.format !== 'es') return void 0;
+        generateBundle: async () => {
           // 生成.d.ts文件
           await new Promise<void>((resolve, reject) => {
             const result = child_process.spawn(
@@ -76,10 +84,17 @@ export default defineConfig(async () => {
               }
             });
           });
+          // clean source map file
+          await Promise.all(glob.sync('dist/*.ts.map')
+            .map((file) => fs.rm(file)));
+          await Promise.all(glob.sync('dist/*.d.ts').map(async file => {
+            const content = await fs.readFile(file, {encoding: 'utf-8'});
+            await fs.writeFile(file, content.replace(/^\/\/# sourceMappingURL=.+(?:\r\n|\r|\n)?$/gm, ''), {encoding: 'utf-8'});
+          }));
         },
         closeBundle: async () => {
           const logger = createLogger();
-          logger.info(`${dim('dist/types/')}${blue('index.d.ts')}`);
+          logger.info(`${dim('dist/')}${blue('index.d.ts')}`);
         },
       } satisfies PluginOption,
       {

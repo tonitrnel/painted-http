@@ -15,7 +15,7 @@
     "isolatedModules": true,
     "baseUrl": ".",
     "outDir": "./dist",
-    "declarationDir": "./dist/types",
+    "declarationDir": "./dist",
     "declarationMap": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,

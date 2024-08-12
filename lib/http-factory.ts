@@ -46,12 +46,44 @@ export class HttpFactory<S extends HttpSchemaProperties> {
     };
     return new HttpFactory<S>(method, pathname);
   }
+
+  /**
+   * 应用 TypeScript 类型
+   *
+   * 可应用的类型有:
+   *   - Query: 应用查询类型
+   *   - Path: 应用路径参数类型（注: 不要指定该类型，路径参数会自动推导，详见示例）
+   *   - Body: 应用数据主体类型
+   *   - Headers: 应用 HTTP 头类型(不常见)
+   *   - Response: 应用响应类型(不常见)
+   *   - Error: 应用错误类型
+   *
+   * @example ```ts
+   * createHttpFactory('GET:/users')
+   *   .apply<'Query', { page: number, size: number }>
+   *   .apply<'Response', { id: string, nickname: string }[]>
+   * ```
+   *
+   * @example ```ts
+   * // 自动推导路径参数
+   * createHttpFactory('GET:/users/{user_id}')
+   * // 等同与
+   * createHttpFactory('GET:/users/{user_id}')
+   *   .apply<'Path', { user_id: string }>
+   * ```
+   */
   public apply<K extends ApplicableKeys, T>() {
     // override prev same type
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     return this as unknown as HttpFactory<Omit<S, K> & Record<K, T>>;
   }
+
+  /**
+   * 制作一个 Query 请求 Hook，常用于 GET 请求
+   *
+   * 注: 该请求 Hook 会在使用时立即发出请求
+   */
   public doQueryRequest = () => {
     const { pathname, method } = this;
     let seq = 0;
@@ -79,6 +111,8 @@ export class HttpFactory<S extends HttpSchemaProperties> {
         path?: S['Path'];
         // 当前Hooks缓存的ID
         cachedIds?: Set<string>;
+        // 标记依赖是否过时，主要根据 Query 和 Path 参数来决定
+        depOutdated?: boolean
       }>({});
       // 强制刷新
       const dispatchUpdate = useReducer(() => ({}), { pathname })[1];
@@ -94,11 +128,13 @@ export class HttpFactory<S extends HttpSchemaProperties> {
       const dependencies = useMemo(() => {
         const { query: previousQuery, path: previousPath } =
           metadataRef.current;
-        if (!previousQuery || !isEquals(previousQuery, options.query)) {
+        if ((!previousQuery && !!options.query) || !isEquals(previousQuery, options.query)) {
           metadataRef.current.query = options.query;
+          metadataRef.current.depOutdated = true;
         }
-        if (!previousPath || !isEquals(previousPath, options.path)) {
+        if ((!previousPath && !!options.path) || !isEquals(previousPath, options.path)) {
           metadataRef.current.path = options.path;
+          metadataRef.current.depOutdated = true;
         }
         return pick(metadataRef.current, ['query', 'path']);
       }, [options.path, options.query]);
@@ -450,12 +486,17 @@ export class HttpFactory<S extends HttpSchemaProperties> {
       // 触发请求
       useEffect(() => {
         if (options.enabled === false) return void 0;
+        // 数据未过时，不需要重新触发
+        if (metadataRef.current.depOutdated === false) {
+          return void 0
+        }
+        metadataRef.current.depOutdated = false
         implicitly().catch((err) => {
           // 都是致命的错误，需要抛出让使用者解决
           throw err;
         });
       }, [options.enabled, implicitly]);
-      // // 在 Hook enabled 设置为 false 时的相关逻辑
+      // 在 Hook enabled 设置为 false 时的相关逻辑
       useLayoutEffect(() => {
         if (options.enabled !== false) return void 0;
         const metadata = metadataRef.current;
@@ -463,6 +504,7 @@ export class HttpFactory<S extends HttpSchemaProperties> {
         if (!options.keepDirtyOnNotEnabled && metadata.requestId) {
           cleanup();
           dispatchUpdate();
+          metadata.depOutdated = true;
         } else if (metadata.pending) {
           // 在未启用时 pending 应始终为false
           metadata.pending = false;
@@ -520,6 +562,11 @@ export class HttpFactory<S extends HttpSchemaProperties> {
     Reflect.set(useHttpQueryRequest, ' __source', { method, pathname });
     return useHttpQueryRequest;
   };
+  /**
+   * 制作一个 Mutation 请求 Hook，常用于 POST、PATCH、PUT、DELETE 请求，
+   *
+   * 注: 该请求 Hook 不会自动发出请求，需要主动调用 `execute` 方法才可发出请求
+   */
   public doMutationRequest = () => {
     const { pathname, method } = this;
     function useHttpMutationRequest(options: HttpMutationHookOptions<S> = {}) {
@@ -662,6 +709,21 @@ export class HttpFactory<S extends HttpSchemaProperties> {
     Reflect.set(useHttpMutationRequest, ' __source', { method, pathname });
     return useHttpMutationRequest;
   };
+  /**
+   * 制作一个普通地请求，即一个 `fetch` 函数的包装，用于直接调用
+   *
+   * @example ```typescript
+   * const createUser = createHttpFactory('POST:/users')
+   *   .apply<'Body', { nickname: string, address: string }>
+   *   .apply<'Response', { code: number, msg: string }>
+   * await createUser({
+   *   body: {
+   *     nickname: 'Bob',
+   *     address: '...'
+   *   }
+   * })
+   * ```
+   */
   public doRequest = () => {
     const { pathname, method } = this;
     async function httpRequest<Mutated = S['Response']>(
@@ -827,7 +889,7 @@ export interface Serializers<TQuery, TBody> {
   body?(body: TBody): unknown;
 }
 
-// ====== Query Type
+// ====== Query Type ======
 
 export interface HttpQueryHookOptions<
   S extends HttpSchemaProperties,
@@ -835,7 +897,10 @@ export interface HttpQueryHookOptions<
 > {
   /**
    * 查询参数
-   * @examples ```typescript
+   *
+   * 注: `query` 所有字段将会作为自动发起请求的依赖，即值发生变化时将自动发起请求
+   *
+   * @example ```typescript
    * const useGETForUsers = createHttpGetFactory('/api/users/list')
    * export default function App() {
    *   useGETForUsers({
@@ -850,7 +915,10 @@ export interface HttpQueryHookOptions<
   query?: S['Query'];
   /**
    * 路径参数
-   * @examples ```typescript
+   *
+   * 注: `query` 所有字段将会作为自动发起请求的依赖，即值发生变化时将自动发起请求
+   *
+   * @example ```typescript
    * const useGETForUser = createHttpGetFactory('/api/users/{userId}')
    * export default function App() {
    *   useGETForUsers({
@@ -864,7 +932,7 @@ export interface HttpQueryHookOptions<
   path?: S['Path'];
   /**
    * 启用该查询
-   * @examples ```typescript
+   * @example ```typescript
    * const useGETForUsers = createHttpGetFactory('/api/users/list')
    * export default function App() {
    *   useGETForUsers({
@@ -878,10 +946,14 @@ export interface HttpQueryHookOptions<
   enabled?: boolean;
   /**
    * 请求头数据
+   *
+   * 注: `headers` 不会作为自动发起请求的依赖
    */
   headers?: S['Headers'];
   /**
    * fetch init 配置
+   *
+   * 注: `init` 不会作为自动发起请求的依赖
    */
   init?: RequestInit;
   /**
@@ -896,6 +968,7 @@ export interface HttpQueryHookOptions<
   keepDirtyOnPending?: boolean;
   /**
    * 自定义如何序列化 query 参数
+   *
    * @examples ```ts
    * const useGETForUsers = createHttpGetFactory('/api/user/list')
    * // GET请求时，自定义如何将query参数序列化为query字符串
@@ -931,8 +1004,7 @@ export interface HttpQueryHookOptions<
   fetcher?: (request: Request) => Promise<[S['Response'], Response]>;
   /**
    * 是否启用缓存
-   * @tips 需要在父层组件使用 HttpCacheProvider
-   * @examples ```ts
+   * @example ```ts
    * const useGETForUsers = createHttpGetFactory('/api/users/list')
    * export default function App() {
    *   useGETForUsers({
@@ -960,7 +1032,7 @@ export interface HttpQueryHookOptions<
         /**
          * 缓存生命周期
          * @param inner 只在当前组件生命周期内有效
-         * @param outer 在HttpCacheProvider组件生命周期内有效
+         * @param outer `HttpClientProvider` 组件生命周期内有效
          * @default outer
          */
         scope?: 'inner' | 'outer';
@@ -1050,7 +1122,7 @@ type QueryExecuteFunc<S extends HttpSchemaProperties> = (
   ...args: [query: Bypass<S['Query']>, options?: QueryExecuteOptions<S>]
 ) => Promise<S['Response']>;
 
-// ====== Mutation Type
+// ====== Mutation Type ======
 export type HttpMutationHookOptions<S extends HttpSchemaProperties> = {
   /**
    * 查询参数
@@ -1064,6 +1136,10 @@ export type HttpMutationHookOptions<S extends HttpSchemaProperties> = {
    * header参数
    */
   headers?: S['Headers'];
+  /**
+   * Custom fetcher function
+   * @description This function can be used to override default behaviors.
+   */
   fetcher?: (request: Request) => Promise<[S['Response'], Response]>;
   /**
    * fetch init 配置

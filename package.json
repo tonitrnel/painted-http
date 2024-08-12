@@ -1,6 +1,6 @@
 {
   "name": "@painted/http",
-  "version": "0.0.1-rc.9",
+  "version": "0.0.1-rc.10",
   "type": "module",
   "description": "React hooks library for data fetching",
   "scripts": {
@@ -27,6 +27,7 @@
     "fetch"
   ],
   "exports": {
+    "./package.json": "./package.json",
     ".": {
       "import": {
         "types": "./dist/index.d.ts",

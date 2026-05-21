@@ -1,33 +1,25 @@
 import { type QueriesCache } from "./cache";
 
 export interface ContextOptions {
-  cache?: {
-    capacity?: number;
-    staleTime?: number;
-  };
+  "cache.capacity"?: number;
+  /**
+   * 缓存有效期(unit: ms)
+   * @default 5 Minutes
+   */
+  "cache.staleTime"?: number;
   baseUrl?: string;
   fetcher?: (request: Request) => Promise<[unknown, Response]>;
   default?: {
-    query?: {
-      // query execute function options.
-      execution?: {
-        /**
-         * If the silent mode is true, then the execution will not trigger a re-render of React Component.
-         * @default true
-         */
-        silent?: boolean;
-      };
-    };
-    mutation?: {
-      // mutation execute function options.
-      execution?: {
-        /**
-         * If the silent mode is true, then the execution will not trigger a re-render of React Component.
-         * @default true
-         */
-        silent?: boolean;
-      };
-    };
+    /**
+     * If the silent mode is true, then the execution will not trigger a re-render of React Component.
+     * @default true
+     */
+    "query.execute.silent"?: boolean;
+    /**
+     * If the silent mode is true, then the execution will not trigger a re-render of React Component.
+     * @default true
+     */
+    "mutation.execute.silent"?: boolean;
   };
 }
 export interface ARQContext {

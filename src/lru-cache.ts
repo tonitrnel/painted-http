@@ -21,10 +21,10 @@ export class LruCache<K, T> {
   }
 
   public set(key: K, value: T): void {
-    if (this.linkedMap.size >= this.capacity) {
+    if (this.linkedMap.has(key)) this.deleteLinked(this.linkedMap.get(key)!);
+    else if (this.linkedMap.size >= this.capacity) {
       if (this.tail) this.delete(this.tail.key);
     }
-    if (this.linkedMap.has(key)) this.deleteLinked(this.linkedMap.get(key)!);
     this.linkedMap.set(key, this.insertLinked(key, value));
   }
   public delete(key: K) {
@@ -127,6 +127,9 @@ export class LruCache<K, T> {
     if (this.tail === node) {
       this.tail = node.prev!;
       this.tail.next = void 0;
+    } else {
+      node.prev!.next = node.next;
+      node.next!.prev = node.prev;
     }
     node.next = this.head;
     node.prev = void 0;

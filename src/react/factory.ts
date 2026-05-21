@@ -16,6 +16,7 @@ import {
   createBaseMutationHook,
   createBaseQueryHook,
 } from "../base";
+import { isEquals } from "../utilities";
 
 export interface QueryHookOptions<
   S extends HttpSchemaProperties,
@@ -155,6 +156,7 @@ export class ARQFactory<
       }, [controller, options.enabled]);
 
       useEffect(() => {
+        controller.mount();
         return () => {
           controller.unmount();
         };
@@ -218,6 +220,7 @@ export class ARQFactory<
       }, []);
 
       useEffect(() => {
+        controller.mount();
         return () => {
           controller.unmount();
         };
@@ -234,39 +237,39 @@ export class ARQFactory<
     return useMutation;
   }
 
-  public static fromQueryCustom<P extends HttpSchemaProperties["Query"], R>(
-    execute: (params: P) => Promise<R>,
-  ) {
-    const instance = new ARQFactory<
-      Omit<HttpSchemaProperties, "Query" | "Response"> & {
-        Query: P;
-        Response: R;
-      },
-      P,
-      [R, undefined]
-    >("/", ".");
-    instance.fetcher = (params: P) =>
-      execute(params).then((data) => [data, void 0]);
-    instance.mode = "custom";
-    return instance.makeQuery();
-  }
+  // public static fromQueryCustom<P extends HttpSchemaProperties["Query"], R>(
+  //   execute: (params: P) => Promise<R>,
+  // ) {
+  //   const instance = new ARQFactory<
+  //     Omit<HttpSchemaProperties, "Query" | "Response"> & {
+  //       Query: P;
+  //       Response: R;
+  //     },
+  //     P,
+  //     [R, undefined]
+  //   >("/", ".");
+  //   instance.fetcher = (params: P) =>
+  //     execute(params).then((data) => [data, void 0]);
+  //   instance.mode = "custom";
+  //   return instance.makeQuery();
+  // }
 
-  public static fromMutationCustom<P extends HttpSchemaProperties["Body"], R>(
-    execute: (params: P) => Promise<R>,
-  ) {
-    const instance = new ARQFactory<
-      Omit<HttpSchemaProperties, "Body" | "Response"> & {
-        Body: P;
-        Response: R;
-      },
-      P,
-      [R, undefined]
-    >("/", ".");
-    instance.fetcher = (params: P) =>
-      execute(params).then((data) => [data, void 0]);
-    instance.mode = "custom";
-    return instance.makeMutation();
-  }
+  // public static fromMutationCustom<P extends HttpSchemaProperties["Body"], R>(
+  //   execute: (params: P) => Promise<R>,
+  // ) {
+  //   const instance = new ARQFactory<
+  //     Omit<HttpSchemaProperties, "Body" | "Response"> & {
+  //       Body: P;
+  //       Response: R;
+  //     },
+  //     P,
+  //     [R, undefined]
+  //   >("/", ".");
+  //   instance.fetcher = (params: P) =>
+  //     execute(params).then((data) => [data, void 0]);
+  //   instance.mode = "custom";
+  //   return instance.makeMutation();
+  // }
 }
 
 export const createARQFactory = <S extends string>(
@@ -288,32 +291,4 @@ export const createARQFactory = <S extends string>(
       Path: ParsePathParameters<S>;
     }
   >;
-};
-
-const isEquals = (left: unknown, right: unknown): boolean => {
-  if (Object.is(left, right)) return true;
-  if (left === null || right === null) return left === right;
-  if (typeof left !== "object" || typeof right !== "object") return false;
-  if (Array.isArray(left) || Array.isArray(right)) {
-    if (!Array.isArray(left) || !Array.isArray(right)) return false;
-    if (left.length !== right.length) return false;
-    return left.every((item, index) => isEquals(item, right[index]));
-  }
-  if (
-    Object.getPrototypeOf(left) !== Object.prototype ||
-    Object.getPrototypeOf(right) !== Object.prototype
-  ) {
-    return false;
-  }
-
-  const leftRecord = left as Record<string, unknown>;
-  const rightRecord = right as Record<string, unknown>;
-  const leftKeys = Object.keys(leftRecord);
-  const rightKeys = Object.keys(rightRecord);
-  if (leftKeys.length !== rightKeys.length) return false;
-  return leftKeys.every(
-    (key) =>
-      Object.prototype.hasOwnProperty.call(rightRecord, key) &&
-      isEquals(leftRecord[key], rightRecord[key]),
-  );
 };

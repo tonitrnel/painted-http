@@ -257,39 +257,39 @@ export class ARQFactory<
     return useMutation;
   }
 
-  public static fromQueryCustom<P extends HttpSchemaProperties["Query"], R>(
-    execute: (params: P) => Promise<R>,
-  ) {
-    const instance = new ARQFactory<
-      Omit<HttpSchemaProperties, "Query" | "Response"> & {
-        Query: P;
-        Response: R;
-      },
-      P,
-      [R, undefined]
-    >("/", ".");
-    instance.fetcher = (params: P) =>
-      execute(params).then((data) => [data, void 0]);
-    instance.mode = "custom";
-    return instance.makeQuery();
-  }
+  // public static fromQueryCustom<P extends HttpSchemaProperties["Query"], R>(
+  //   execute: (params: P) => Promise<R>,
+  // ) {
+  //   const instance = new ARQFactory<
+  //     Omit<HttpSchemaProperties, "Query" | "Response"> & {
+  //       Query: P;
+  //       Response: R;
+  //     },
+  //     P,
+  //     [R, undefined]
+  //   >("/", ".");
+  //   instance.fetcher = (params: P) =>
+  //     execute(params).then((data) => [data, void 0]);
+  //   instance.mode = "custom";
+  //   return instance.makeQuery();
+  // }
 
-  public static fromMutationCustom<P extends HttpSchemaProperties["Body"], R>(
-    execute: (params: P) => Promise<R>,
-  ) {
-    const instance = new ARQFactory<
-      Omit<HttpSchemaProperties, "Body" | "Response"> & {
-        Body: P;
-        Response: R;
-      },
-      P,
-      [R, undefined]
-    >("/", ".");
-    instance.fetcher = (params: P) =>
-      execute(params).then((data) => [data, void 0]);
-    instance.mode = "custom";
-    return instance.makeMutation();
-  }
+  // public static fromMutationCustom<P extends HttpSchemaProperties["Body"], R>(
+  //   execute: (params: P) => Promise<R>,
+  // ) {
+  //   const instance = new ARQFactory<
+  //     Omit<HttpSchemaProperties, "Body" | "Response"> & {
+  //       Body: P;
+  //       Response: R;
+  //     },
+  //     P,
+  //     [R, undefined]
+  //   >("/", ".");
+  //   instance.fetcher = (params: P) =>
+  //     execute(params).then((data) => [data, void 0]);
+  //   instance.mode = "custom";
+  //   return instance.makeMutation();
+  // }
 }
 
 export const createARQFactory = <S extends string>(

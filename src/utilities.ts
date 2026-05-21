@@ -109,3 +109,33 @@ type PipeCarrying<PrevValue> = <
       ? { _: ReturnType<NextArgs[0]> }
       : { _: PrevValue }
 >;
+/**
+ * Equality check
+ * @param x
+ * @param y
+ */
+export const isEquals = (x: unknown, y: unknown): boolean => {
+  if (Object.is(x, y)) return true;
+  if (x === null || y === null) return false;
+  if (typeof x !== "object" || typeof y !== "object") return false;
+  if (Array.isArray(x) || Array.isArray(y)) {
+    if (!Array.isArray(x) || !Array.isArray(y)) return false;
+    if (x.length !== y.length) return false;
+    return x.every((item, index) => isEquals(item, y[index]));
+  }
+  if (!isPlainObject(x) || !isPlainObject(y)) return false;
+  const xKeys = Object.keys(x);
+  const yKeys = Object.keys(y);
+  if (xKeys.length !== yKeys.length) return false;
+  for (const key of xKeys) {
+    if (
+      !Object.prototype.hasOwnProperty.call(y, key) ||
+      !isEquals(
+        Reflect.get(x as Record<string, unknown>, key),
+        Reflect.get(y as Record<string, unknown>, key),
+      )
+    )
+      return false;
+  }
+  return true;
+};

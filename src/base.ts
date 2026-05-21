@@ -450,7 +450,7 @@ export function createBaseQueryHook<
           const now = Date.now();
           const staleTime =
             options.cache?.staleTime ??
-            options.client.options.cache?.staleTime ??
+            options.client.options["cache.staleTime"] ??
             300_000;
           const expireTime = now + staleTime;
           const cacheKey = makeCacheKey(mode, options.cache.key);
@@ -542,7 +542,7 @@ export function createBaseQueryHook<
   const execute: QueryExecuteFunc<S> = async (...args) => {
     const query = args[0] as S["Query"];
     const executeOptions = (args[1] ?? {
-      silent: options.client.options.default?.query?.execution?.silent,
+      silent: options.client.options.default?.["query.execute.silent"],
     }) as QueryExecuteOptions<S>;
     const rerender = createRerender(executeOptions.silent === false, render);
 
@@ -599,6 +599,9 @@ export function createBaseQueryHook<
     execute,
     refresh,
     implicitly,
+    mount() {
+      metadata.unmounted = false;
+    },
     markDependenciesOutdated() {
       metadata.depOutdated = true;
     },
@@ -752,7 +755,7 @@ export function createBaseMutationHook<
 
   const execute: MutationExecuteFunc<S> = async (...args) => {
     const executeOptions = (args[1] ?? {
-      silent: options.client.options.default?.mutation?.execution?.silent,
+      silent: options.client.options.default?.["mutation.execute.silent"],
     }) as MutationExecuteOptions<S>;
     const rerender = createRerender(executeOptions.silent === false, render);
     await options.onBefore?.();
@@ -796,6 +799,9 @@ export function createBaseMutationHook<
 
   return {
     execute,
+    mount() {
+      metadata.unmounted = false;
+    },
     unmount() {
       metadata.unmounted = true;
     },

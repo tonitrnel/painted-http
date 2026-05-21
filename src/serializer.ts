@@ -95,6 +95,8 @@ export const serializers = {
     if (body instanceof FormData) return [undefined, body] as const;
     if (body instanceof Blob) return [undefined, body] as const;
     if (body instanceof ArrayBuffer) return [undefined, body] as const;
+    if (body instanceof Uint8Array) return [undefined, body] as const;
+    if (Array.isArray(body)) return [undefined, new Uint8Array(body)] as const;
     if (isPlainObject(body))
       return ["application/json", JSON.stringify(body) as string] as const;
     return [undefined, undefined] as const;

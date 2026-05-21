@@ -7,7 +7,7 @@ const __CTX_KEY__ = Symbol() as InjectionKey<ARQContext>;
 export const createARQContext = (options: ContextOptions = {}): ARQContext => {
   return {
     options,
-    queries: new QueriesCache(options.cache?.capacity ?? 24),
+    queries: new QueriesCache(options["cache.capacity"] ?? 24),
   };
 };
 

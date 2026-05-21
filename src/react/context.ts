@@ -13,7 +13,7 @@ const __CTX__ = createContext<ARQContext | null>(null);
 export const createARQContext = (options: ContextOptions = {}): ARQContext => {
   return {
     options,
-    queries: new QueriesCache(options.cache?.capacity ?? 24),
+    queries: new QueriesCache(options["cache.capacity"] ?? 24),
   };
 };
 export const useARQContext = () => {
